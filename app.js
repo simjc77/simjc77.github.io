@@ -1,4 +1,5 @@
 'use strict';
+// 자동 업데이트: 이 파일이 바뀌면 PC 창은 즉시, 폰 앱은 GitHub Pages 배포 후 자동 새로고침
 /* 포켓몬 카드 감정소 — 카드 DB: TCGdex (영문 2.3만+ / 일본 1.2만+ / 한글 일부, Cardmarket·TCGplayer 시세 포함)
    이미지 분석: Claude API (브라우저에서 직접 호출, 키는 이 기기 localStorage 에만 저장) */
 const TCG = 'https://api.tcgdex.net/v2';
