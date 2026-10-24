@@ -209,13 +209,19 @@ function tabScan() {
   <div class="box"><h2>📷 이미지로 한번에 감정</h2>
     <p class="mut">카드 앞면(필수) + 뒷면(선택, 상태 판정 정확도↑) 사진을 넣으면 카드 식별 → 레어도·상태 등급·감정 점수·시세·거래 링크를 한번에 보여줍니다. 붙여넣기(Ctrl+V)·드래그도 됩니다.</p>
     <p>분석 방식: <b>${ENGINES[k.engine]}</b> <a href="#" onclick="go('settings')">변경</a></p>
-    <div id="drop">🖼️ 여기를 눌러 사진 선택 / 촬영 · 끌어다 놓기 (최대 4장)<input id="file" type="file" accept="image/*" capture="environment" multiple hidden></div>
+    <div class="row" style="margin-bottom:8px"><button class="pri" id="bGal" style="flex:1;padding:14px">🖼️ 앨범·갤러리에서 선택</button>
+      <button class="pri" id="bCam" style="flex:1;padding:14px">📷 지금 촬영</button></div>
+    <div id="drop">PC: 여기를 눌러 사진 선택 · 끌어다 놓기 · Ctrl+V (최대 4장, 앞면 먼저)</div>
+    <input id="file" type="file" accept="image/*,.heic,.heif" multiple hidden><input id="cam" type="file" accept="image/*" capture="environment" hidden>
     <div class="thumbs" id="thumbs"></div>
     <div class="row"><button class="pri" id="go" disabled>🔍 감정 시작</button><button id="clr">지우기</button><span class="mut" id="st"></span></div>
   </div><div id="res"></div><div id="hist"></div>`;
   const drop = $('#drop'), file = $('#file');
-  drop.onclick = () => file.click();
-  file.onchange = () => addImgs(file.files);
+  // capture 가 붙은 입력은 안드로이드에서 카메라만 열리므로, 앨범 선택용 입력을 따로 둠
+  drop.onclick = $('#bGal').onclick = () => file.click();
+  $('#bCam').onclick = () => $('#cam').click();
+  file.onchange = () => { addImgs(file.files); file.value = ''; };
+  $('#cam').onchange = e => { addImgs(e.target.files); e.target.value = ''; };
   drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
   drop.ondragleave = () => drop.classList.remove('over');
   drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); addImgs(e.dataTransfer.files); };
@@ -226,9 +232,17 @@ function tabScan() {
 document.addEventListener('paste', e => { if (cur === 'scan' && e.clipboardData?.files?.length) addImgs(e.clipboardData.files); });
 async function addImgs(files) {
   for (const f of [...files].slice(0, 4 - scanImgs.length)) {
-    if (!f.type.startsWith('image/')) { toast(`${f.name}: 이미지 파일이 아닙니다`); continue; }
+    const heic = /hei[cf]$/i.test(f.type) || /\.hei[cf]$/i.test(f.name);
+    if (!f.type.startsWith('image/') && !heic) { toast(`${f.name}: 이미지 파일이 아닙니다`); continue; }
     try { scanImgs.push(await shrink(f)); }
-    catch { toast(`${f.name}: 이 형식은 열 수 없습니다 (HEIC 는 JPG 로 변환해 주세요)`, 5000); }
+    catch {
+      try { // 아이폰 HEIC 사진: 브라우저가 못 열면 무료 변환 라이브러리로 JPG 변환
+        toast('아이폰 사진(HEIC) 변환 중…');
+        if (!window.heic2any) await loadScript('https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js');
+        const jpg = await heic2any({ blob: f, toType: 'image/jpeg', quality: 0.9 });
+        scanImgs.push(await shrink(Array.isArray(jpg) ? jpg[0] : jpg));
+      } catch { toast(`${f.name}: 이 사진 형식은 열 수 없습니다. 사진을 JPG로 저장하거나 화면 캡처 후 다시 선택해 주세요`, 6000); }
+    }
   }
   drawThumbs();
 }
