@@ -1,5 +1,5 @@
 // 네트워크 우선: 수정한 앱 파일이 바로 반영되고, 오프라인일 때만 캐시 사용
-const C = 'pokecard-v3';
+const C = 'pokecard-v4';
 // PC 서버가 꺼졌을 때 보여줄 화면: 2초마다 재접속 시도, 서버가 켜지면 자동 새로고침
 const OFFLINE = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>포켓몬 카드 감정소</title><body style="font-family:'Malgun Gothic',sans-serif;text-align:center;padding:60px 16px">
@@ -10,6 +10,16 @@ self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
+  // 갤러리 '공유하기' → 이 앱 (안드로이드에 설치된 경우): 사진을 잠시 보관하고 감정 화면으로 이동
+  if (e.request.method === 'POST' && u.pathname.endsWith('/share-target')) {
+    e.respondWith((async () => {
+      const files = (await e.request.formData()).getAll('image').slice(0, 4), c = await caches.open('pk-share');
+      for (const k of await c.keys()) await c.delete(k);
+      await Promise.all(files.map((f, i) => c.put(`shared-${i}`, new Response(f, { headers: { 'Content-Type': f.type || 'image/jpeg', 'X-Name': encodeURIComponent(f.name || 'photo.jpg') } }))));
+      return Response.redirect(`./?shared=${files.length}`, 303);
+    })());
+    return;
+  }
   if (e.request.method !== 'GET' || u.origin !== location.origin || u.pathname.startsWith('/api/') || u.pathname === '/img') return;
   // no-cache: GitHub Pages 의 10분 캐시를 건너뛰고 항상 최신 파일 확인 (바뀐 게 없으면 304로 빠름)
   e.respondWith(fetch(e.request.url, { cache: 'no-cache' }).then(r => { const copy = r.clone(); caches.open(C).then(c => c.put(e.request, copy)); return r; })

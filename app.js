@@ -810,6 +810,20 @@ if (location.protocol.startsWith('http')) {
   setInterval(() => pendingUpdate && !busy() && applyUpdate(), 2000); // 사용 중이라 미뤘던 업데이트를 끝나면 적용
 }
 
+/* ---------- 갤러리에서 '공유하기'로 받은 사진 → 바로 감정 ---------- */
+(async () => {
+  const n = +new URLSearchParams(location.search).get('shared');
+  if (!n || !('caches' in window)) return;
+  history.replaceState(null, '', location.pathname);
+  try {
+    const c = await caches.open('pk-share'), files = [];
+    for (const req of await c.keys()) { const r = await c.match(req); const b = await r.blob(); files.push(new File([b], decodeURIComponent(r.headers.get('X-Name') || 'photo.jpg'), { type: b.type })); await c.delete(req); }
+    if (!files.length) return;
+    go('scan'); scanImgs = []; await addImgs(files);
+    if (scanImgs.length) analyze();
+  } catch (e) { toast('공유한 사진을 열지 못했습니다: ' + e.message); }
+})();
+
 /* ---------- 폰 홈 화면 설치 버튼 ---------- */
 let installEvt = null;
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone;
