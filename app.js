@@ -455,7 +455,7 @@ async function analyze(manual) {
   const k = cfg(), st = $('#st'), res = $('#res');
   if (k.engine === 'gemini' && !k.gkey) { toast('설정에서 Gemini 무료 키를 넣거나 "무료 글자인식"을 선택하세요'); return go('settings'); }
   if (k.engine === 'claude' && !k.key) { toast('설정에서 Claude API 키를 넣거나 무료 방식을 선택하세요'); return go('settings'); }
-  $('#go').disabled = true; res.innerHTML = '';
+  $('#go').disabled = true; res.innerHTML = ''; analyzing = true;
   try {
     let ai;
     if (manual) ai = { is_pokemon_card: true, _free: true, ...manual };
@@ -501,7 +501,7 @@ async function analyze(manual) {
     }
     st.textContent = '완료';
   } catch (e) { res.innerHTML = `<div class="box err">❌ ${esc(e.message)}</div>`; st.textContent = ''; rlog(`analyze ${cfg().engine}: ${e.message}`); }
-  finally { $('#go').disabled = !scanImgs.length; }
+  finally { $('#go').disabled = !scanImgs.length; analyzing = false; }
 }
 function shrinkData(d, max) { return new Promise(ok => { const im = new Image(); im.onload = () => { const s = max / Math.max(im.width, im.height), cv = document.createElement('canvas'); cv.width = im.width * s; cv.height = im.height * s; cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); ok(cv.toDataURL('image/jpeg', .7)); }; im.onerror = () => ok(''); im.src = d; }); }
 function drawHistory() {
@@ -727,16 +727,7 @@ function tabSettings() {
     } catch (e) { out(false, e.name === 'TimeoutError' || e.name === 'AbortError' ? '❌ 20초 동안 응답 없음 — 백신/보안 프로그램이나 방화벽이 연결을 막는지 확인하세요' : '❌ 연결 실패 (인터넷·보안 프로그램 확인)'); }
   };
   $('#lan').innerHTML = `<button class="pri" onclick="showPhone()">📱 폰 연결 QR코드 보기</button>
-    ${serverOK ? `<p><b>어디서나 쓰기 (무료, GitHub Pages)</b><br><input id="repo" placeholder="https://github.com/아이디/저장소" style="width:100%" value="${esc(store.get('repo', ''))}">
-    <button id="pub">🌐 웹에 배포 / 업데이트</button> <span id="pubr" class="mut"></span></p>` : ''}`;
-  if ($('#pub')) $('#pub').onclick = async () => {
-    const repo = $('#repo').value.trim(); store.set('repo', repo);
-    $('#pubr').innerHTML = '<span class="spin"></span> 올리는 중… (처음엔 GitHub 로그인 창이 뜰 수 있음)';
-    try {
-      const d = await (await fetchT('/api/publish', { method: 'POST', body: repo }, 200000)).json();
-      $('#pubr').innerHTML = d.ok ? `✅ 완료 → <a target="_blank" href="${esc(d.url)}">${esc(d.url)}</a> (반영까지 1~2분)` : `<span class="err">❌ ${esc(d.error)}</span>`;
-    } catch (e) { $('#pubr').innerHTML = `<span class="err">❌ ${esc(e.message)}</span>`; }
-  };
+    <p class="mut">📲 폰 앱: <b>https://simjc77.github.io/</b> — 어디서나 사용 가능. 앱이 바뀌면 PC·폰 모두 자동으로 최신 버전이 됩니다 (버튼 누를 필요 없음).</p>`;
 }
 
 /* ---------- 폰 연결 (같은 Wi-Fi, 무료) ---------- */
@@ -744,6 +735,7 @@ async function showPhone() {
   openDlg('📱 핸드폰에서 쓰기', '<span class="spin"></span>');
   try {
     const d = await (await fetchT('/api/beat', {}, 5000)).json();
+    if (d.web) throw new Error('web'); // 어디서나 되는 웹 주소가 있으면 그 QR을 보여줌
     if (!window.QRCode) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js');
     $('#dlgB').innerHTML = `<div style="text-align:center"><div id="qr" style="display:inline-block;padding:12px;background:#fff"></div>
       <p style="font-size:20px"><b>${esc(d.lan)}</b></p>
@@ -753,7 +745,7 @@ async function showPhone() {
       안 열리면: 폰이 모바일데이터가 아닌 같은 Wi-Fi인지 확인. 주소(IP)는 공유기가 바꿀 수 있어 이 창에서 늘 최신 QR이 보입니다.</p></div>`;
     new QRCode($('#qr'), { text: d.lan, width: 220, height: 220 });
   } catch {
-    const url = location.origin + location.pathname;
+    const url = isPC && window.WEB_URL ? window.WEB_URL : location.origin + location.pathname;
     try { if (!window.QRCode) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'); } catch {}
     $('#dlgB').innerHTML = `<div style="text-align:center"><div id="qr" style="display:inline-block;padding:12px;background:#fff"></div><p style="font-size:18px"><b>${esc(url)}</b></p>
       <p>이 주소는 어디서나(LTE/5G 포함) 열립니다. 안드로이드: ⋮ → <b>홈 화면에 추가/앱 설치</b> · 아이폰(사파리): 공유 → <b>홈 화면에 추가</b></p></div>`;
@@ -767,44 +759,66 @@ let cur = 'scan', BOOT_VER = null, LOADED = Date.now() / 1000, serverOK = false;
 function go(t) { cur = TABS[t] ? t : 'scan'; store.set('tab', cur); $('#nav').innerHTML = Object.entries(TABS).map(([k, [n]]) => `<button class="${k === cur ? 'on' : ''}" onclick="go('${k}')">${n}</button>`).join(''); TABS[cur][1](); }
 go(store.get('tab', 'scan'));
 
-/* ---------- 업데이트 · 재시작 · 단일 창 ---------- */
-const bU = $('#bUpdate'), bR = $('#bRestart');
+/* ---------- 자동 업데이트 (버튼 없음) · 단일 창 ---------- */
+// 새 버전이 감지되면 사용 중이 아닐 때(분석 중·팝업·입력 중 아님) 자동 새로고침. PC는 서버 신호로, 폰 웹앱은 version.json 으로 감지
+let analyzing = false, pendingUpdate = false;
+const busy = () => analyzing || dlg.open || ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
 async function applyUpdate() {
+  try { sessionStorage.setItem('pk_updated', '1'); } catch {}
   try { const regs = await navigator.serviceWorker?.getRegistrations?.() || []; await Promise.all(regs.map(r => r.update())); } catch {}
   try { for (const k of await caches.keys()) await caches.delete(k); } catch {}
   location.reload();
 }
-bU.onclick = applyUpdate;
-bR.onclick = async () => {
-  if (!serverOK) return toast('PC 서버 없이 실행 중이라 재시작할 수 없습니다 (새로고침만 가능)');
-  bR.disabled = true; bR.textContent = '♻️ 재시작 중…';
-  try { await fetch('/api/restart', { method: 'POST' }); } catch {}
-  for (let i = 0; i < 40; i++) { await new Promise(r => setTimeout(r, 500)); try { if ((await fetch('/api/beat')).ok) return applyUpdate(); } catch {} }
-  bR.disabled = false; bR.textContent = '♻️ 재시작'; toast('서버가 다시 켜지지 않았습니다. 바탕화면 아이콘으로 실행해 주세요.', 6000);
-};
+function gotVersion(v) {
+  if (!v) return;
+  if (!BOOT_VER) { BOOT_VER = v; $('#ver').textContent = 'v' + v; return; }
+  if (v !== BOOT_VER) pendingUpdate = true;
+  if (pendingUpdate && !busy()) applyUpdate();
+}
+let beatFails = 0;
 async function beat() {
   try {
     const r = await fetch('/api/beat', { cache: 'no-store' }); if (!r.ok) throw new Error('no server');
     const d = await r.json();
-    serverOK = true;
-    BOOT_VER ??= d.version; $('#ver').textContent = 'v' + BOOT_VER;
-    const upd = d.version !== BOOT_VER;
-    bU.classList.toggle('hot', upd); bU.textContent = upd ? '🔄 새 버전 적용' : '🔄 업데이트';
-    bR.classList.toggle('hot', d.serverChanged); if (d.serverChanged) bR.title = '서버 코드가 바뀌었습니다 — 재시작 필요';
-    if (d.cmd === 'focus' && d.cmdAt > LOADED) { LOADED = d.cmdAt; window.focus(); if (upd) applyUpdate(); else toast('이미 실행 중인 창입니다 👋'); }
-  } catch { if (serverOK) { serverOK = false; toast('PC 서버 연결이 끊겼습니다 — 재시작 버튼 또는 바탕화면 아이콘으로 다시 실행', 6000); } }
+    serverOK = true; beatFails = 0; window.WEB_URL = d.web;
+    gotVersion(d.version);
+    if (d.cmd === 'focus' && d.cmdAt > LOADED) { LOADED = d.cmdAt; window.focus(); toast('이미 실행 중인 창입니다 👋'); }
+  } catch { if (serverOK && ++beatFails === 5) toast('PC 서버 연결이 끊겼습니다 — 바탕화면 아이콘으로 다시 실행해 주세요', 6000); } // 자동 재시작 중 잠깐 끊기는 건 무시
 }
-// PC 서버가 있을 때만 신호 확인. GitHub Pages 같은 웹 주소에서는 첫 확인이 실패하면 멈추고 재시작 버튼을 숨김
-let beatTimer = null;
+async function webVersion() { try { const d = await (await fetch('version.json?t=' + Date.now(), { cache: 'no-store' })).json(); gotVersion(d.v); } catch {} }
+try { if (sessionStorage.getItem('pk_updated')) { sessionStorage.removeItem('pk_updated'); setTimeout(() => toast('✨ 새 버전으로 자동 업데이트됐습니다'), 500); } } catch {}
 if (location.protocol.startsWith('http')) {
-  beat().then(() => { if (serverOK) beatTimer = setInterval(beat, 3000); else bR.style.display = 'none'; });
+  beat().then(() => {
+    if (serverOK) setInterval(beat, 3000);
+    else { webVersion(); setInterval(webVersion, 60000); document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && webVersion()); }
+  });
+  setInterval(() => pendingUpdate && !busy() && applyUpdate(), 2000); // 사용 중이라 미뤘던 업데이트를 끝나면 적용
 }
+
+/* ---------- 폰 홈 화면 설치 버튼 ---------- */
+let installEvt = null;
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+const isPC = ['127.0.0.1', 'localhost'].includes(location.hostname);
+const bI = $('#bInstall');
+if (!standalone() && !isPC) bI.hidden = false;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (!isPC) bI.hidden = false; });
+addEventListener('appinstalled', () => { bI.hidden = true; toast('📲 홈 화면에 설치됐습니다'); });
+bI.onclick = async () => {
+  if (installEvt) { installEvt.prompt(); const { outcome } = await installEvt.userChoice; installEvt = null; if (outcome === 'accepted') bI.hidden = true; return; }
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent), https = location.protocol === 'https:';
+  openDlg('📲 홈 화면에 설치', `<div style="font-size:16px;line-height:1.8">
+    ${!https ? `<p class="err">이 주소(http)는 설치용이 아닙니다. 어디서나 되는 <a href="https://simjc77.github.io/">https://simjc77.github.io/</a> 에서 설치하세요.</p>` : ''}
+    ${ios ? `<p><b>아이폰 (사파리에서 열어야 함)</b><br>① 화면 아래 <b>공유 버튼 ⬆️</b> → ② <b>홈 화면에 추가</b> → ③ 오른쪽 위 <b>추가</b></p><p class="mut">카카오톡 등 앱 안에서 열었다면 먼저 "Safari로 열기"</p>`
+      : `<p><b>안드로이드</b><br>① 오른쪽 위 <b>⋮</b> 메뉴 → ② <b>앱 설치</b> 또는 <b>홈 화면에 추가</b> → ③ <b>설치</b></p><p class="mut">삼성 인터넷: 아래 메뉴 ☰ → 페이지 추가 → 홈 화면 · 카카오톡 안이면 먼저 "다른 브라우저로 열기"</p>`}
+    <p class="mut">설치 후에는 앱이 바뀔 때마다 자동으로 최신 버전으로 업데이트됩니다.</p></div>`);
+};
+
 // 같은 앱 창이 여러 개 열리면 예전 창은 스스로 닫힘
 try {
   const bc = new BroadcastChannel('pokecard'), me = Date.now();
   bc.onmessage = e => { if (e.data?.hello && e.data.t > me) { window.close(); setTimeout(() => { document.body.innerHTML = '<p style="padding:40px">새 창에서 실행 중입니다. 이 창은 닫아도 됩니다.</p>'; }, 300); } };
   bc.postMessage({ hello: 1, t: me });
 } catch {}
-if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
 window.addEventListener('unhandledrejection', e => { toast('오류: ' + (e.reason?.message || e.reason)); rlog('unhandled: ' + (e.reason?.stack || e.reason)); });
 window.addEventListener('error', e => rlog(`error: ${e.message} @${e.filename}:${e.lineno}`));

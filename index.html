@@ -12,7 +12,7 @@
 <style>
 :root{--bg:#f4f5f8;--card:#fff;--fg:#1d1f27;--mut:#6b7080;--line:#e2e4ea;--red:#e62832;--acc:#2f6fed;--ok:#14a05a;--warn:#e3a008;--S:#b8860b;--A:#7b3fe4;--B:#2f6fed;--C:#14a05a;--D:#8a8f9c}
 @media (prefers-color-scheme:dark){:root{--bg:#14161c;--card:#1d2029;--fg:#eceef3;--mut:#9aa0ae;--line:#2c303b}}
-*{box-sizing:border-box}
+*{box-sizing:border-box}[hidden]{display:none!important}
 body{margin:0;font-family:"Pretendard","Malgun Gothic",system-ui,sans-serif;background:var(--bg);color:var(--fg);font-size:15px}
 header{position:sticky;top:0;z-index:20;background:var(--red);color:#fff;display:flex;align-items:center;gap:8px;padding:8px 12px;flex-wrap:wrap}
 header h1{font-size:18px;margin:0 auto 0 0;display:flex;align-items:center;gap:8px}
@@ -67,8 +67,7 @@ h2{font-size:18px;margin:6px 0}h3{font-size:16px;margin:12px 0 6px}
 <header>
   <h1><img src="icon-192.png" alt="">포켓몬 카드 감정소 <span class="mut" style="color:#fff9" id="ver"></span></h1>
   <button onclick="showPhone()" title="핸드폰에서 쓰기">📱 폰</button>
-  <button id="bUpdate" title="수정된 앱 파일을 바로 적용">🔄 업데이트</button>
-  <button id="bRestart" title="로컬 서버 재시작">♻️ 재시작</button>
+  <button id="bInstall" class="hot" hidden>📲 홈 화면에 설치</button>
 </header>
 <nav id="nav"></nav>
 <main id="main"></main>
